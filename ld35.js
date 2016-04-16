@@ -1,3 +1,5 @@
+// HTML5 Canvas Basic Game Framework
+// http://rembound.com/articles/how-to-make-a-html5-canvas-game
 window.onload = function() {
     var canvas = document.getElementById("viewport"); 
     var context = canvas.getContext("2d");
@@ -80,8 +82,11 @@ window.onload = function() {
 	
 	function isInView(x, y) {
 		var viewDir = Math.PI*3/2 - getDir(playerX, playerY, x, y + titleHeight);
+		
+		http://stackoverflow.com/questions/1878907/the-smallest-difference-between-2-angles
 		var diff = playerLook - viewDir;
 		var diffAngle = Math.atan2(Math.sin(diff), Math.cos(diff));
+		
 		return (Math.abs(diffAngle) < playerFOV/2);
 	}
 	
