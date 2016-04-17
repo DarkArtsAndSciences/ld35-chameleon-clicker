@@ -21,6 +21,7 @@ window.onload = function() {
 	var mousePos = {x:0, y:0};
 	var player;
 	var others = [];
+	var selected = -1;
 	
 	var isPlaying = false;
 	var score = 0;
@@ -120,7 +121,7 @@ window.onload = function() {
 	}
 	
 	function Other(canvas, context) {
-		this.size = 16;
+		this.size = 32;
 		this.x = Math.floor(Math.random() * canvas.width);
 		this.y = Math.floor(Math.random() * canvas.height);
 		this.w = function() { return this.x - this.size/2; }
@@ -144,8 +145,8 @@ window.onload = function() {
 		this.shiftSelf = function(context) { this.imageData = context.getImageData(this.x, this.y, this.size, this.size); };
 		this.shiftSelf(context);
 		
-		this.minMoveDelay = 1000;
-		this.maxMoveDelay = 5000;
+		this.minMoveDelay =  5000;
+		this.maxMoveDelay = 15000;
 		this.nextMove = -1;
 		this.shouldMove = function(dt) {
 			if (this.nextMove > 0) {
@@ -182,6 +183,11 @@ window.onload = function() {
 					this.move();
 				}
 		};
+		
+		this.collides = function(point) {
+			return (this.w() < point.x) && (point.x < this.e())
+				&& (this.n() < point.y) && (point.y < this.s());
+		}
 	}
 	
 	function Player(point) {
@@ -263,6 +269,13 @@ window.onload = function() {
 	function onMouseDown(e) {
 		// is there an other under the mouse?
 		// if so, highlight it. no? warn for impending point loss
+		selected = -1;
+		for (var i = 0; i < others.length; i++) {
+			if (others[i].collides(mousePos)) {
+				selected = i;
+				break;
+			}
+		}
 	}
 	function onMouseUp(e) {
 		if (!isPlaying) {
@@ -271,6 +284,11 @@ window.onload = function() {
 		}
 		
 		// follow through with plans from mouse down
+		if (selected < 0) {
+			console.log("boom!");
+		} else {
+			console.log("clicked #" + selected);
+		}
 	}
 	function onMouseOut(e) {
 		// anti-cheat, same as onMouseUp
