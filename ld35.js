@@ -2,11 +2,11 @@
 // http://rembound.com/articles/how-to-make-a-html5-canvas-game
 window.onload = function() {
 	var NORTH = Math.PI * 3/2;
+	var DEBUG = true;
 	
 	var gameName = "LD35 ShapeShift";
-	var titleHeight = 65;
+	var titleHeight = 100;
 	var fpsInterval = 0.5;  // how often to update the FPS display
-	var numOthers = 5;  // TODO: set by level
 	
 	var canvas = document.getElementById("viewport"); 
 	var context = canvas.getContext("2d");
@@ -20,12 +20,7 @@ window.onload = function() {
 	var fps = 0;
 	var mousePos = {x:0, y:0};
 	var player;
-	var others = [];
-	var selected = -1;
-	
 	var isPlaying = false;
-	var score = 0;
-	var mistakes = 0;
 	
 	function AudioHandler() {
 		function loadSound (name) {
@@ -46,6 +41,132 @@ window.onload = function() {
 		};
 	}
 	var audioHandler;
+	
+	function LevelHandler(bufferCanvas, buffer) {
+		var bufferCanvas = bufferCanvas;
+		var buffer = buffer;
+		
+		var numOthers = 3;  // * level
+		var others = [];
+		var selected = -1;
+		this.isSelected = function() { return selected > -1; };
+		this.selectedIsAlive = function() { return others[selected].alive(); };
+		this.anyoneIsAlive = function() {
+			for (var i=0; i<others.length; i++)
+				if (others[i].alive()) 
+					return true;
+			return false;
+		}
+		this.updateOthers = function(dt, players) {
+			for (var i=0; i<others.length; i++)
+				others[i].update(dt, buffer, player);
+		}
+		this.highlightSelected = function() {
+			if (selected >= 0) {
+				var s = others[selected];
+				context.lineWidth = 1;
+				context.strokeStyle = "black";
+				context.strokeRect(s.w(), s.n()+titleHeight, s.size, s.size);
+			}
+		}
+		this.selectCollidee = function(mousePos) {
+			selected = -1;
+			for (var i = 0; i < others.length; i++) {
+				if (others[i].collides(bufferOffset(mousePos))) {
+					selected = i;
+					return true;
+				}
+			}
+			return false;
+		}
+		this.deselect = function() { selected = -1; };
+		
+		var image = document.getElementById("test");
+		var bgImage = function() {
+			buffer.drawImage(image, 0, 0);
+		};
+		var bgPattern = function(bgPatternPixel) {
+			return function() {
+				for (var iy = 0; iy < bufferCanvas.height; iy++) {
+					for (var ix = 0; ix < bufferCanvas.width; ix++) {
+						var c = bgPatternPixel(ix, iy);
+						setPixel(bufferImageData, ix, iy, c.r, c.g, c.b, 255);
+					}
+				}
+				buffer.putImageData(bufferImageData, 0, 0);
+			}
+		};
+		var bgPatternGrid = function (x, y) {
+			var c = 255;
+			if ((x % 16) && (y % 16)) c = 63;
+			else if ((x % 8) || (y % 8)) c = 127;
+			return { r: c, g: c, b: c };
+		};
+		var bgPatternGradient = function (x, y) {
+			var r = (x % 256);
+			var g = (y % 256);
+			var b = ((x + y) % 4) * 64;
+			return { r: r, g: g, b: b };
+		}
+		var bgColor = [
+			bgImage,
+			bgPattern(bgPatternGradient),
+			bgPattern(bgPatternGrid)
+		];
+		
+		var score = -1;
+		var lastScore = -1;
+		var highScore = -1;
+		this.addScore = function() { 
+			score += 1;  // TODO: numOthers * level - aliveOthers 
+			others[selected].onClick();
+			selected = -1;
+		}
+		this.getScore = function() { return score; }
+		this.getLastScore = function() { return lastScore; }
+		this.getHighScore = function() { return highScore; }
+		
+		var mistakes = -1;
+		var lastMistakes = -1;
+		var highMistakes = -1;
+		this.makeMistake = function() {
+			mistakes--; 
+			if (mistakes < 0) {  // game over
+				lastScore = score;
+				lastMistakes = mistakes;
+				highScore = Math.max(score, highScore);
+				gameOver();
+			}
+		}
+		this.getMistakes = function() { return mistakes; }
+		this.getLastMistakes = function() { return lastMistakes; }
+		this.getHighMistakes = function() { return highMistakes; }
+		this.getMistakeColor = function() {
+			return mistakes > 2 ? mistakes > 6 ? "green" : "yellow" : "red";
+		}
+		
+		var level;
+		var mistakesPerLevel = 20;
+		this.getLevel = function () { return level; };
+		this.nextLevel = function() {
+			level++;
+			mistakes += Math.max(1, 1 + mistakesPerLevel - level);
+			highMistakes = Math.max(mistakes, highMistakes);
+			
+			bgColor[level % bgColor.length]();
+			
+			for (var id=0; id < numOthers * level; id++)
+				others[id] = new Other(bufferCanvas, buffer, 1000 * level, 2000 * level * level);
+		}; 
+		this.start = function() { 
+			level = 0; 
+			score = 0; 
+			mistakes = 0;
+			this.nextLevel(); 
+		};
+		this.start();
+	}
+	var levelHandler;
 	
 	function main(tframe) {
 		window.requestAnimationFrame(main);
@@ -73,19 +194,7 @@ window.onload = function() {
 		buffer = bufferCanvas.getContext("2d");
 		bufferImageData = buffer.getImageData(0, 0, bufferCanvas.width, bufferCanvas.height);
 		
-		for (var iy = 0; iy < bufferCanvas.height; iy++) {
-			for (var ix = 0; ix < bufferCanvas.width; ix++) {
-				var c = patternGradient(ix, iy);
-				setPixel(bufferImageData, ix, iy, c.r, c.g, c.b, 255);
-			}
-		}
-		buffer.putImageData(bufferImageData, 0, 0);
-		
-		var image = document.getElementById("test");
-		buffer.drawImage(image, 10, 10);
-		
-		for (var id=0; id < numOthers; id++)
-			others[id] = new Other(bufferCanvas, buffer);
+		levelHandler = new LevelHandler(bufferCanvas, buffer);
 		
 		player = new Player({x: canvas.width/2, y: canvas.height/2});
 		
@@ -97,17 +206,12 @@ window.onload = function() {
 		
 		main(0);
 	}
-	function patternGrid(x, y) {
-		var c = 255;
-		if ((x % 16) && (y % 16)) c = 63;
-		else if ((x % 8) || (y % 8)) c = 127;
-		return { r: c, g: c, b: c };
-	}
-	function patternGradient(x, y) {
-		var r = (x % 256);
-		var g = (y % 256);
-		var b = ((x + y) % 4) * 64;
-		return { r: r, g: g, b: b };
+	
+	function renderCenteredText(context, text, left, top, width, height) {
+		var measure = context.measureText(text);
+		context.fillText(text, 
+			Math.floor(left + width/2 - measure.width/2),
+			Math.floor(top + height/2));
 	}
  
 	function render(dt) {
@@ -116,17 +220,40 @@ window.onload = function() {
 		context.fillRect(0, 0, canvas.width, titleHeight);
 		context.fillStyle = "white";
 		context.font = "24px Verdana";
-		context.fillText(gameName, 10, 30);
+		renderCenteredText(context, gameName, 0, 30, canvas.width, 0);
+		
+		var highScore = levelHandler.getHighScore();
+		var highMistakes = levelHandler.getHighMistakes();
 		
 		if (!isPlaying) {  // start menu
 			context.fillRect(0, titleHeight, canvas.width, canvas.height-titleHeight);
+			// TODO: menu background
+			
 			context.fillStyle = "black";
-			context.fillText("Click to Play", canvas.width/2, canvas.height/2);
-			// TODO: menu
+			renderCenteredText(context, "Click Anywhere to Play", 
+				0, 0, canvas.width, canvas.height * 0.75);
+			context.font = "18px Verdana";
+			var lines = [
+				"Click all the shapes on each level.",
+				"",
+				"They will stop moving",
+				"when you look at them",
+				"but it won't be easier."]
+			for (var i=0; i<lines.length; i++)
+				renderCenteredText(context, lines[i], 
+					0, Math.floor(i*24), canvas.width, canvas.height);
+					
+			context.fillStyle = "#cccccc";
+			context.font = "16px Verdana";
+			if (highScore > -1)
+				renderCenteredText(context, "High Score: " + highScore, 
+					canvas.width * 0.33, titleHeight-30, canvas.width * 0.33, 0);
+			if (highMistakes > -1)
+				renderCenteredText(context, "High Health: " + highMistakes, 
+					canvas.width * 0.67, titleHeight-30, canvas.width * 0.33, 0);
 			
 		} else {  // gameplay
-			for (var i=0; i<others.length; i++)
-				others[i].update(dt, buffer, player);
+			levelHandler.updateOthers(dt, player);
 			
 			if (bufferDirty) {
 				bufferImageData = buffer.getImageData(0, 0, bufferCanvas.width, bufferCanvas.height);
@@ -134,28 +261,47 @@ window.onload = function() {
 			}
 			context.putImageData(bufferImageData, 0, titleHeight);
 			
-			if (selected >= 0) {
-				var s = others[selected];
-				context.lineWidth = 1;
-				context.strokeStyle = "black";
-				context.strokeRect(s.w(), s.n()+titleHeight, s.size, s.size);
-			}
-			
+			levelHandler.highlightSelected(context);
 			player.render(context);
-			context.fillText("Score: " + score, 500, 30);
+			
+			context.font = "16px Verdana";
+			context.fillStyle = "white";
+			renderCenteredText(context, "Level: " + levelHandler.getLevel(), 
+				canvas.width * 0.00, titleHeight-10, canvas.width * 0.33, 0);
+				
+			var score = levelHandler.getScore();
+			context.fillStyle = score > highScore ? "cyan": "white";
+			renderCenteredText(context, "Score: " + score, 
+				canvas.width * 0.33, titleHeight-10, canvas.width * 0.33, 0);
+				
+			context.fillStyle = levelHandler.getMistakeColor();
+			renderCenteredText(context, "Health: " + levelHandler.getMistakes(), 
+				canvas.width * 0.67, titleHeight-10, canvas.width * 0.33, 0);
+				
+			context.fillStyle = "#cccccc";
+			if (highScore > -1)
+				renderCenteredText(context, "High Score: " + highScore, 
+					canvas.width * 0.33, titleHeight-30, canvas.width * 0.33, 0);
+					
+			if (highMistakes > -1)
+				renderCenteredText(context, "High Health: " + highMistakes, 
+					canvas.width * 0.67, titleHeight-30, canvas.width * 0.33, 0);
 		}
 		
 		// fps and mouse text
-		context.font = "12px Verdana";
-		context.fillText("FPS: " + fps + " SPF: " + Math.round(dt*1000)/1000, 13, 50);
-		context.fillText("Mouse: " + mousePos.x + ", " + mousePos.y, 203, 50);
+		if (DEBUG) {
+			context.fillStyle = "white";
+			context.font = "12px Verdana";
+			context.fillText("FPS: " + fps, 5, 18);
+			//context.fillText("Mouse: " + mousePos.x + ", " + mousePos.y, 5, titleHeight-10);
+		}
 		
 		// mouse cursor
 		context.fillStyle = "red";
 		context.fillRect(mousePos.x, mousePos.y, 4, 4);
 	}
 	
-	function Other(canvas, context) {
+	function Other(canvas, context, minMoveDelay, maxMoveDelay) {
 		this.size = 32;
 		this.x = Math.floor(Math.random() * canvas.width);
 		this.y = Math.floor(Math.random() * canvas.height);
@@ -184,8 +330,8 @@ window.onload = function() {
 		this.shiftSelf = function(context) { this.imageData = context.getImageData(this.x, this.y, this.size, this.size); };
 		this.shiftSelf(context);
 		
-		this.minMoveDelay =  5000;
-		this.maxMoveDelay = 15000;
+		this.minMoveDelay = minMoveDelay;
+		this.maxMoveDelay = maxMoveDelay;
 		this.nextMove = -1;
 		this.shouldMove = function(dt) {
 			if (this.nextMove > 0) {
@@ -322,42 +468,32 @@ window.onload = function() {
 	
 	var clickStart = function (e) {
 		audioHandler.sounds.warning.play();
-		
-		selected = -1;
-		for (var i = 0; i < others.length; i++) {
-			if (others[i].collides(bufferOffset(mousePos))) {
-				selected = i;
-				return;
-			}
-		}
+		levelHandler.selectCollidee(mousePos);
 	};
 	var clickFinish = function (e) {
-		if (selected < 0) {
+		if (!levelHandler.isSelected()) {
 			if (mouseIsDown) {
+				console.log("You clicked empty space.");
 				audioHandler.sounds.mistake.play();
-				score--;
-				mistakes++;
-			}
+				levelHandler.makeMistake();
+			} // else it's a mouseUp mouseOut, ignore
 		} else {
-			if (!others[selected].alive()) {
-				//console.log("clicked #" + selected + " again");
+			if (!levelHandler.selectedIsAlive()) {
+				console.log("It's already dead, quit clicking it.");
 				audioHandler.sounds.overkill.play();
-				selected = -1;
+				levelHandler.deselect();
 				return;
 			}
 			
-			//console.log("clicked #" + selected);
+			console.log("It dies; its colors invert.");
 			audioHandler.sounds.score.play();
-			score++;
-			others[selected].onClick();
-			selected = -1;
+			levelHandler.addScore();
 			
-			for (var i=0; i<others.length; i++)
-				if (others[i].alive()) 
-					return;		
-			// if we're here, they're all dead
-			console.log("level complete!");
-			audioHandler.sounds.complete.play();
+			if (!levelHandler.anyoneIsAlive()) {
+				console.log("Level complete!  Have some more...");
+				audioHandler.sounds.complete.play();
+				levelHandler.nextLevel();
+			}
 		}
 	};
 	
@@ -365,6 +501,7 @@ window.onload = function() {
 	
 	var startGame = function () { 
 		isPlaying = false;
+		levelHandler.start();
 		handleMouse("start");
 	};
 	var playGame = function () { 
@@ -375,10 +512,15 @@ window.onload = function() {
 		isPlaying = false;
 		handleMouse("pause");
 	};
+	var gameOver = function () {
+		isPlaying = false;
+		levelHandler.start();
+		handleMouse("start");
+	}
 	
 	function handleMouse(state) {
 		if (state == "start") {
-			_onMouseMove = doNothing;
+			_onMouseMove = updateMouse;
 			_onMouseDown = doNothing;
 			_onMouseUp = playGame;
 			_onMouseOut = doNothing;
