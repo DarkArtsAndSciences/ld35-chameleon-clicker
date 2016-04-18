@@ -68,6 +68,7 @@ window.onload = function() {
 		canvas.addEventListener("mousedown", onMouseDown);
 		canvas.addEventListener("mouseup", onMouseUp);
 		canvas.addEventListener("mouseout", onMouseOut);
+		startGame();
 		
 		main(0);
 	}
@@ -94,6 +95,8 @@ window.onload = function() {
 		
 		if (!isPlaying) {  // start menu
 			context.fillRect(0, titleHeight, canvas.width, canvas.height-titleHeight);
+			context.fillStyle = "black";
+			context.fillText("Click to Play", canvas.width/2, canvas.height/2);
 			// TODO: menu
 			
 		} else {  // gameplay
@@ -105,6 +108,13 @@ window.onload = function() {
 				bufferDirty = false;
 			}
 			context.putImageData(bufferImageData, 0, titleHeight);
+			
+			if (selected >= 0) {
+				var s = others[selected];
+				context.lineWidth = 1;
+				context.strokeStyle = "black";
+				context.strokeRect(s.w(), s.n()+titleHeight, s.size, s.size);
+			}
 			
 			player.render(context);
 			context.fillText("Score: " + score, 500, 30);
@@ -124,10 +134,6 @@ window.onload = function() {
 		this.size = 32;
 		this.x = Math.floor(Math.random() * canvas.width);
 		this.y = Math.floor(Math.random() * canvas.height);
-		this.w = function() { return this.x - this.size/2; }
-		this.e = function() { return this.x + this.size/2; }
-		this.n = function() { return this.y - this.size/2; }
-		this.s = function() { return this.y + this.size/2; }
 		this.updateCanvas = function(canvas) {
 			this.nMin = this.size/2;
 			this.wMin = this.size/2;
@@ -140,6 +146,14 @@ window.onload = function() {
 			this.y = Math.min(Math.max(this.nMin, this.y), this.sMax);
 		};
 		this.stayInside(canvas);
+		this.w = function() { return Math.floor(this.x - this.size/2); };
+		this.e = function() { return Math.floor(this.x + this.size/2); };
+		this.n = function() { return Math.floor(this.y - this.size/2); };
+		this.s = function() { return Math.floor(this.y + this.size/2); };
+		this.collides = function(point) {
+			return (this.w() < point.x) && (point.x < this.e())
+				&& (this.n() < point.y) && (point.y < this.s());
+		};
 		
 		this.shiftContext = function(context) { context.putImageData(this.imageData, this.w(), this.n()); };
 		this.shiftSelf = function(context) { this.imageData = context.getImageData(this.x, this.y, this.size, this.size); };
@@ -169,25 +183,36 @@ window.onload = function() {
 		};
 		this.move = moveRandomDir;
 		
-		this.update = function(dt, context, player) {
+		var updateLive = function(dt, context, player) {
 			// http://stackoverflow.com/questions/1878907/the-smallest-difference-between-2-angles
 			var diff = player.dir - (NORTH - angleBetween(player.x, player.y, this.x, this.y));
 			var diffAngle = Math.atan2(Math.sin(diff), Math.cos(diff));
-			
 			if (Math.abs(diffAngle) < player.fov/2)  // if they can see me
 				this.shiftSelf(context);  // shapeshift self to background
-			else 
-				if (this.shouldMove(dt)) {
-					this.shiftContext(context);  // shapeshift background to self
-					bufferDirty = true;
-					this.move();
-				}
+			else if (this.shouldMove(dt)) {
+				this.shiftContext(context);  // shapeshift background to self
+				bufferDirty = true;
+				this.move();
+			}
 		};
-		
-		this.collides = function(point) {
-			return (this.w() < point.x) && (point.x < this.e())
-				&& (this.n() < point.y) && (point.y < this.s());
-		}
+		var updateDie = function(dt, context, player) {
+			var chalkOutline = context.getImageData(this.x, this.y, this.size, this.size);
+			for (var iy = 0; iy < chalkOutline.height; iy++) {
+				for (var ix = 0; ix < chalkOutline.width; ix++) {
+					var c = getPixel(chalkOutline, ix, iy);
+					setPixel(chalkOutline, ix, iy, 255-c.r, 255-c.g, 255-c.b, 255);
+				}
+			}
+			context.putImageData(chalkOutline, this.w(), this.n());
+			bufferDirty = true;
+			this.update = updateDead;
+		};
+		var updateDead = function(dt, context, player) {
+			; // TODO: ghost floats away
+		};
+		this.update = updateLive;
+		this.alive = function() { return this.update == updateLive; };
+		this.onClick = function() { this.update = updateDie; };
 	}
 	
 	function Player(point) {
@@ -246,7 +271,7 @@ window.onload = function() {
 		imageData.data[index+2] = b;
 		imageData.data[index+3] = a;
 	}
-	/*function getPixel(imageData, x, y) {
+	function getPixel(imageData, x, y) {
 		index = (x + y * imageData.width) * 4;
 		return { 
 			r: imageData.data[index+0],
@@ -254,45 +279,90 @@ window.onload = function() {
 			b: imageData.data[index+2],
 			a: imageData.data[index+3]
 		}
-	}*/
+	}
 
 	function angleBetween(x1, y1, x2, y2) { return Math.atan2(x1-x2, y1-y2); }
 	
-	function onMouseMove(e) {
+	function bufferOffset(point) { return { x: point.x, y: point.y - titleHeight }; }
+	
+	var updateMouse = function (e) {
 		var r = canvas.getBoundingClientRect();
 		mousePos = {
 			x: Math.round((e.clientX - r.left)/(r.right  - r.left)*canvas.width ),
 			y: Math.round((e.clientY - r.top )/(r.bottom - r.top )*canvas.height)
 		}
 		player.lookAt(mousePos);  // TODO: smooth
-	}
-	function onMouseDown(e) {
-		// is there an other under the mouse?
-		// if so, highlight it. no? warn for impending point loss
+	};
+	
+	var clickStart = function (e) {
 		selected = -1;
 		for (var i = 0; i < others.length; i++) {
-			if (others[i].collides(mousePos)) {
+			if (others[i].collides(bufferOffset(mousePos))) {
 				selected = i;
-				break;
+				return;
 			}
 		}
-	}
-	function onMouseUp(e) {
-		if (!isPlaying) {
-			isPlaying = true;
-			return;
-		}
-		
-		// follow through with plans from mouse down
+		console.log("tick...tick...tick...");
+	};
+	var clickFinish = function (e) {
 		if (selected < 0) {
 			console.log("boom!");
+			score--;
+			mistakes++;
 		} else {
+			if (!others[selected].alive()) {
+				console.log("clicked #" + selected + " again");
+				selected = -1;
+				return;
+			}
+			
 			console.log("clicked #" + selected);
+			score++;
+			others[selected].onClick();
+			selected = -1;
+			
+			for (var i=0; i<others.length; i++)
+				if (others[i].alive()) 
+					return;		
+			// if we're here, they're all dead
+			console.log("level complete!");
 		}
+	};
+	
+	var doNothing = function () { ; };
+	
+	var startGame = function () { 
+		isPlaying = false;
+		handleMouse("start");
+	};
+	var playGame = function () { 
+		isPlaying = true;
+		handleMouse("play");
+	};
+	var pauseGame = function () {
+		isPlaying = false;
+		handleMouse("pause");
+	};
+	
+	function handleMouse(state) {
+		if (state == "start") {
+			_onMouseMove = doNothing;
+			_onMouseDown = doNothing;
+			_onMouseUp = playGame;
+			_onMouseOut = doNothing;
+		} else {  // state == "play"
+			_onMouseMove = updateMouse;
+			_onMouseDown = clickStart;
+			_onMouseUp = clickFinish;
+			_onMouseOut = clickFinish;
+		}
+		// TODO: pause
 	}
-	function onMouseOut(e) {
-		// anti-cheat, same as onMouseUp
-	}
+	
+	function onMouseMove(e) { _onMouseMove(e); }
+	function onMouseDown(e) { _onMouseDown(e); }
+	function onMouseUp(e)   { _onMouseUp(e); }
+	function onMouseOut(e)  { _onMouseOut(e); }
 	
 	init();
 };
