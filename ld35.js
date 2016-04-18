@@ -59,6 +59,9 @@ window.onload = function() {
 		}
 		buffer.putImageData(bufferImageData, 0, 0);
 		
+		var image = document.getElementById("test");
+		buffer.drawImage(image, 10, 10);
+		
 		for (var id=0; id < numOthers; id++)
 			others[id] = new Other(bufferCanvas, buffer);
 		
