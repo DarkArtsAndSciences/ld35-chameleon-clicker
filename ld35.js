@@ -306,9 +306,11 @@ window.onload = function() {
 	};
 	var clickFinish = function (e) {
 		if (selected < 0) {
-			console.log("boom!");
-			score--;
-			mistakes++;
+			if (mouseIsDown) {
+				console.log("boom!");
+				score--;
+				mistakes++;
+			}
 		} else {
 			if (!others[selected].alive()) {
 				console.log("clicked #" + selected + " again");
@@ -359,9 +361,10 @@ window.onload = function() {
 		// TODO: pause
 	}
 	
+	var mouseIsDown = false;
 	function onMouseMove(e) { _onMouseMove(e); }
-	function onMouseDown(e) { _onMouseDown(e); }
-	function onMouseUp(e)   { _onMouseUp(e); }
+	function onMouseDown(e) { _onMouseDown(e); mouseIsDown = true; }
+	function onMouseUp(e)   { _onMouseUp(e); mouseIsDown = false; }
 	function onMouseOut(e)  { _onMouseOut(e); }
 	
 	init();
