@@ -27,6 +27,26 @@ window.onload = function() {
 	var score = 0;
 	var mistakes = 0;
 	
+	function AudioHandler() {
+		function loadSound (name) {
+			return new Howl({
+				urls: ['sfx/'+name+'.wav'],
+				autoplay: false,
+				buffer: true,
+				loop: false
+			});
+		}
+		this.sounds = {
+			score: loadSound("score"),
+			mistake: loadSound("mistake"),
+			overkill: loadSound("fade"),
+			complete: loadSound("flip_down"),
+			shiftSelf: loadSound("flip_up"),
+			warning: loadSound("minibass")
+		};
+	}
+	var audioHandler;
+	
 	function main(tframe) {
 		window.requestAnimationFrame(main);
 		render(update(tframe));
@@ -45,6 +65,8 @@ window.onload = function() {
 	}
 	
 	function init() {
+		audioHandler = new AudioHandler();
+		
 		bufferCanvas = document.createElement('canvas');
 		bufferCanvas.width = canvas.width;
 		bufferCanvas.height = canvas.height - titleHeight;
@@ -190,9 +212,10 @@ window.onload = function() {
 			// http://stackoverflow.com/questions/1878907/the-smallest-difference-between-2-angles
 			var diff = player.dir - (NORTH - angleBetween(player.x, player.y, this.x, this.y));
 			var diffAngle = Math.atan2(Math.sin(diff), Math.cos(diff));
-			if (Math.abs(diffAngle) < player.fov/2)  // if they can see me
+			if (Math.abs(diffAngle) < player.fov/2) {  // if they can see me
 				this.shiftSelf(context);  // shapeshift self to background
-			else if (this.shouldMove(dt)) {
+				//audioHandler.sounds.shiftSelf.play();
+			} else if (this.shouldMove(dt)) {
 				this.shiftContext(context);  // shapeshift background to self
 				bufferDirty = true;
 				this.move();
@@ -298,6 +321,8 @@ window.onload = function() {
 	};
 	
 	var clickStart = function (e) {
+		audioHandler.sounds.warning.play();
+		
 		selected = -1;
 		for (var i = 0; i < others.length; i++) {
 			if (others[i].collides(bufferOffset(mousePos))) {
@@ -305,23 +330,24 @@ window.onload = function() {
 				return;
 			}
 		}
-		console.log("tick...tick...tick...");
 	};
 	var clickFinish = function (e) {
 		if (selected < 0) {
 			if (mouseIsDown) {
-				console.log("boom!");
+				audioHandler.sounds.mistake.play();
 				score--;
 				mistakes++;
 			}
 		} else {
 			if (!others[selected].alive()) {
-				console.log("clicked #" + selected + " again");
+				//console.log("clicked #" + selected + " again");
+				audioHandler.sounds.overkill.play();
 				selected = -1;
 				return;
 			}
 			
-			console.log("clicked #" + selected);
+			//console.log("clicked #" + selected);
+			audioHandler.sounds.score.play();
 			score++;
 			others[selected].onClick();
 			selected = -1;
@@ -331,6 +357,7 @@ window.onload = function() {
 					return;		
 			// if we're here, they're all dead
 			console.log("level complete!");
+			audioHandler.sounds.complete.play();
 		}
 	};
 	
