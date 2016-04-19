@@ -1,5 +1,3 @@
-// HTML5 Canvas Basic Game Framework
-// http://rembound.com/articles/how-to-make-a-html5-canvas-game
 window.onload = function() {
 	var NORTH = Math.PI * 3/2;
 	var DEBUG = true;
@@ -168,6 +166,8 @@ window.onload = function() {
 	}
 	var levelHandler;
 	
+	// HTML5 Canvas Basic Game Framework
+	// http://rembound.com/articles/how-to-make-a-html5-canvas-game
 	function main(tframe) {
 		window.requestAnimationFrame(main);
 		render(update(tframe));
