@@ -1,8 +1,8 @@
 window.onload = function() {
 	var NORTH = Math.PI * 3/2;
-	var DEBUG = true;
+	var DEBUG = false;
 	
-	var gameName = "LD35 ShapeShift";
+	var gameName = "Chameleon Clicker";
 	var titleHeight = 100;
 	var fpsInterval = 0.5;  // how often to update the FPS display
 	
@@ -79,9 +79,17 @@ window.onload = function() {
 		}
 		this.deselect = function() { selected = -1; };
 		
-		var image = document.getElementById("test");
-		var bgImage = function() {
-			buffer.drawImage(image, 0, 0);
+		var image1 = document.getElementById("image1");
+		var imagePattern1 = buffer.createPattern(image1, 'repeat');
+		var image2 = document.getElementById("image2");
+		var imagePattern2 = buffer.createPattern(image2, 'repeat');
+		var image3 = document.getElementById("image3");
+		var imagePattern3 = buffer.createPattern(image3, 'repeat');
+		var bgImage = function(pattern) {
+			return function() {
+				buffer.fillStyle = pattern;
+				buffer.fillRect(0, 0, bufferCanvas.width, bufferCanvas.height);
+			};
 		};
 		var bgPattern = function(bgPatternPixel) {
 			return function() {
@@ -94,29 +102,41 @@ window.onload = function() {
 				buffer.putImageData(bufferImageData, 0, 0);
 			}
 		};
-		var bgPatternGrid = function (x, y) {
-			var c = 255;
-			if ((x % 16) && (y % 16)) c = 63;
-			else if ((x % 8) || (y % 8)) c = 127;
-			return { r: c, g: c, b: c };
-		};
-		var bgPatternGradient = function (x, y) {
-			var r = (x % 256);
-			var g = (y % 256);
-			var b = ((x + y) % 4) * 64;
-			return { r: r, g: g, b: b };
+		var bgPatternGradient1 = function (x, y) {
+			return { 
+				r: (x % 225), 
+				g: (y % 225), 
+				b: ((x + y) % 4) * 64, 
+			};
+		}
+		var bgPatternGradient2 = function (x, y) {
+			return { 
+				r: (y % 128) * 2, 
+				g: (x % 128) * 2, 
+				b: ((x - y) % 8) * 32, 
+			};
+		}
+		var bgPatternGradient3 = function (x, y) {
+			return { 
+				r: ((x + y) % 32) * 8, 
+				g: (y % 64) * 4, 
+				b: (x % 64) * 4, 
+			};
 		}
 		var bgColor = [
-			bgImage,
-			bgPattern(bgPatternGradient),
-			bgPattern(bgPatternGrid)
+			bgPattern(bgPatternGradient1),
+			bgPattern(bgPatternGradient2),
+			bgPattern(bgPatternGradient3),
+			bgImage(imagePattern1),
+			bgImage(imagePattern2),
+			bgImage(imagePattern3),
 		];
 		
 		var score = -1;
 		var lastScore = -1;
 		var highScore = -1;
 		this.addScore = function() { 
-			score += 1;  // TODO: numOthers * level - aliveOthers 
+			score += level;  // TODO: numOthers * level - aliveOthers 
 			others[selected].onClick();
 			selected = -1;
 		}
@@ -140,7 +160,7 @@ window.onload = function() {
 		this.getLastMistakes = function() { return lastMistakes; }
 		this.getHighMistakes = function() { return highMistakes; }
 		this.getMistakeColor = function() {
-			return mistakes > 2 ? mistakes > 6 ? "green" : "yellow" : "red";
+			return mistakes > 3 ? mistakes > 10 ? "green" : "yellow" : "red";
 		}
 		
 		var level;
@@ -154,7 +174,8 @@ window.onload = function() {
 			bgColor[level % bgColor.length]();
 			
 			for (var id=0; id < numOthers * level; id++)
-				others[id] = new Other(bufferCanvas, buffer, 1000 * level, 2000 * level * level);
+				others[id] = new Other(bufferCanvas, buffer, 
+					1000 * level, 2000 * level * level, level);
 		}; 
 		this.start = function() { 
 			level = 0; 
@@ -301,8 +322,8 @@ window.onload = function() {
 		context.fillRect(mousePos.x, mousePos.y, 4, 4);
 	}
 	
-	function Other(canvas, context, minMoveDelay, maxMoveDelay) {
-		this.size = 32;
+	function Other(canvas, context, minMoveDelay, maxMoveDelay, speed) {
+		this.size = Math.random() > 0.75 ? 32 : 24;
 		this.x = Math.floor(Math.random() * canvas.width);
 		this.y = Math.floor(Math.random() * canvas.height);
 		this.updateCanvas = function(canvas) {
@@ -330,6 +351,7 @@ window.onload = function() {
 		this.shiftSelf = function(context) { this.imageData = context.getImageData(this.x, this.y, this.size, this.size); };
 		this.shiftSelf(context);
 		
+		var speed = speed;
 		this.minMoveDelay = minMoveDelay;
 		this.maxMoveDelay = maxMoveDelay;
 		this.nextMove = -1;
@@ -343,8 +365,8 @@ window.onload = function() {
 		};
 		var moveRandomDir = function() {
 			var direction = Math.random() * Math.PI * 2;
-			this.x += Math.cos(direction) * this.size;
-			this.y += Math.sin(direction) * this.size;
+			this.x += Math.cos(direction) * this.size/2 * speed;
+			this.y += Math.sin(direction) * this.size/2 * speed;
 		};
 		var moveOnePixel = function() {
 			var directions = [{x:1,y:1},{x:-1,y:1},{x:1,y:-1},{x:-1,y:-1}];
